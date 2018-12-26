@@ -8,240 +8,87 @@ use GraphQL\GraphQL;
 use GraphQL\Server\StandardServer;
 
 try {
+  $photoType = new ObjectType([
+    'name' => 'photo',
+    'fields' => [
+      'imagePath' => ['type' => Type::string()],
+      'name' => ['type' => Type::string()],
+    ]
+  ]);
 
-    $userType = new ObjectType([
-      'name' => 'user',
-      //use callable syntax as versionType is not defined yet
-      //read more here: http://webonyx.github.io/graphql-php/type-system/object-types/#recurring-and-circular-types
-      'fields' => function() use (&$fileType) {
-        return  [
-          'id' => ['type' => Type::int()],
-          'firstName' => ['type' => Type::string()],
-          'lastName' => ['type' => Type::string()],
-          'email' => ['type' => Type::string()],
-          'files' => [
-              'type' => Type::listOf($fileType),
-              'resolve' => function ($root, $args) {
-
-                $db = new SQLite3('../db/data.db');
-                $results = $db->query('SELECT * FROM file where userId='.$root['id']);
-                $resultArr = [];
-                while ($row = $results->fetchArray(SQLITE3_ASSOC)) {
-                  $resultArr[] = $row;
-                }
-
-                return $resultArr;
-              }
-            ]
-          ];
-      }
-    ]);
-
-    $versionType = new ObjectType([
-      'name' => 'version',
-      'description' => 'Object of type version',
-      'fields' =>  [
-          'id' => ['type' => Type::id()],
-          'name' => ['type' => Type::string()],
-          'mimetype' => ['type' => Type::string()],
-          'url' => ['type' => Type::string()],
-          'size' => ['type' => Type::int()],
-          'created' => ['type' => Type::int()],
-          
-          //resolve version user
-          'user' => [
-            'type' => $userType,
-            'resolve' => function($root, $args) {
-              $db = new SQLite3('../db/data.db');
-              $results = $db->query('SELECT * FROM user where id='.$root['userId']);
-              $resultArr = [];
-              while ($row = $results->fetchArray(SQLITE3_ASSOC)) {
-                $resultArr[] = $row;
-              }
-
-              // $file = 'log.txt';
-              // $current = file_get_contents($file);
-              // file_put_contents($file, print_r($resultArr, true));
-    
-              return $resultArr[0];
-            }
+  $queryType = new ObjectType([
+    'name' => 'Query',
+    'fields' => [
+      'photos' => [
+        'type' => Type::listOf($photoType),
+        'args' => [
+          'q' => [
+            'type' => Type::string(),
+            'defaultValue' => null
           ],
         ],
-    ]); 
+        'resolve' => function ($root, $args) {
+          try {
+            error_log(json_encode([$root, $args]));
+            $conds = ['RKVersion.nonRawMasterUuid = RKMaster.uuid'];
+            $vals = [];
 
-    $fileType = new ObjectType([
-      'name' => 'file',
-      'description' => 'Object of type File',
-      'fields' =>  [
-          'id' => ['type' => Type::id()],
-          'name' => ['type' => Type::string()],
-          'folderId' => ['type' => Type::id()],
-          
-          //resolve file user
-          'user' => [
-            'type' => $userType,
-            'resolve' => function($root, $args) {
-              $db = new SQLite3('../db/data.db');
-              $results = $db->query('SELECT * FROM user where id='.$root['userId']);
-              $resultArr = [];
-              while ($row = $results->fetchArray(SQLITE3_ASSOC)) {
-                $resultArr[] = $row;
-              }
-
-              // $file = 'log.txt';
-              // $current = file_get_contents($file);
-              // file_put_contents($file, print_r($resultArr, true));
-    
-              return $resultArr[0];
+            if($args['q']) {
+              $conds[] = 'RKVersion.name LIKE :q';
+              $vals[] = [':q', '%' . $args['q'] . '%']; // NB: no escaping for _ or %
             }
-          ],
-          'versions' => [
-            'type' => Type::listOf($versionType),
-            'resolve' => function ($root, $args) {
-              
-              $db = new SQLite3('../db/data.db');
-              $results = $db->query('SELECT * FROM version where fileId='.$root['id']);
-              $resultArr = [];
-              while ($row = $results->fetchArray(SQLITE3_ASSOC)) {
-                $resultArr[] = $row;
-              }
-              
-              // $file = 'log.txt';
-              // $current = file_get_contents($file);
-              // file_put_contents($file, print_r($resultArr, true));
 
-              return $resultArr;
+            error_log(json_encode([$conds, $vals]));
+
+            $db = new SQLite3('../../photos.db');
+            error_log(2);
+            $q = '
+              SELECT RKMaster.imagePath, RKVersion.name
+              FROM RKVersion, RKMaster
+              WHERE
+              '. implode(" AND ", $conds) . '
+              LIMIT 50
+            ';
+            error_log($q);
+
+            $stmt = $db->prepare($q);
+            foreach($vals as $v) {
+            $stmt->bindValue($v[0], $v[1]);
             }
-          ]
-        ]
-    ]); 
+            $result = $stmt->execute();
 
-    $queryType = new ObjectType([
-      'name' => 'Query',
-      'fields' => [
-
-        //get single user
-        'user' => [
-          'type' => $userType,
-          'args' => [
-            'id' => ['type' => Type::nonNull(Type::int())],
-          ],
-          'resolve' => function ($root, $args) {
-
-            $db = new SQLite3('../db/data.db');
-            $results = $db->query('SELECT * FROM user where id='.$args['id']);
-        
             $resultArr = [];
-            while ($row = $results->fetchArray(SQLITE3_ASSOC)) {
+            while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
               $resultArr[] = $row;
             }
 
-            return $resultArr[0];
+            // error_log(json_encode([resultArr => $resultArr]));
+
+            return $resultArr;
+          } catch (\Exception $e) {
+            error_log("INTERNAL ERROR:");
+            error_log($e);
+            StandardServer::send500Error('INTERNAL ERROR');
           }
-        ],
-
-        //get single file
-        'file' => [
-          'type' => $fileType,
-          'args' => [
-            'id' => ['type' => Type::nonNull(Type::int())],
-          ],
-          'resolve' => function ($root, $args) {
-
-            $db = new SQLite3('../db/data.db');
-            $results = $db->query('SELECT * FROM file where id='.$args['id']);
-        
-            $resultArr = [];
-            while ($row = $results->fetchArray(SQLITE3_ASSOC)) {
-              $resultArr[] = $row;
-            }
-
-            return $resultArr[0];
-          }
-        ],
-
-        //get single version
-        'version' => [
-          'type' => $versionType,
-          'args' => [
-            'id' => ['type' => Type::nonNull(Type::int())],
-          ],
-          'resolve' => function ($root, $args) {
-
-            $db = new SQLite3('../db/data.db');
-            $results = $db->query('SELECT * FROM version where id='.$args['id']);
-        
-            $resultArr = [];
-            while ($row = $results->fetchArray(SQLITE3_ASSOC)) {
-              $resultArr[] = $row;
-            }
-
-            return $resultArr[0];
-          }
-        ],
+        }
       ],
-    ]);
+    ],
+  ]);
 
-    //mutations
-    $mutationType = new ObjectType([
-      'name' => 'mutation',
-      'fields' => [
+  // See docs on schema options:
+  // http://webonyx.github.io/graphql-php/type-system/schema/#configuration-options
+  $schema = new Schema([
+    'query' => $queryType,
+    // 'mutation' => $mutationType,
+  ]);
 
-        //add a user
-        'addUser' => [
-          'type' => $userType,
-          'args' => [
-            'firstName' => ['type' => Type::nonNull(Type::string())],
-            'lastName' => ['type' => Type::nonNull(Type::string())],
-            'email' => ['type' => Type::nonNull(Type::string())],
-          ],
-          'resolve' => function ($root, $args) {
-          
-            $db = new SQLite3('../db/data.db');
-            $results = $db->query("INSERT INTO user (firstName, lastName, email) VALUES ('".$args['firstName']."', '".$args['lastName']."', '".$args['email']."');");
-            $results = $db->query("SELECT * FROM USER WHERE id=last_insert_rowid();");
-            $resultArr = [];
-            while ($row = $results->fetchArray(SQLITE3_ASSOC)) {
-              $resultArr[] = $row;
-            }
+  // See docs on server options:
+  // http://webonyx.github.io/graphql-php/executing-queries/#server-configuration-options
+  $server = new StandardServer([
+      'schema' => $schema
+  ]);
 
-            // $file = 'log.txt';
-            // $current = file_get_contents($file);
-            // file_put_contents($file, print_r($resultArr, true));
-
-            return $resultArr[0];
-          },
-        ],
-
-        //delete a user
-        'deleteUser' => [
-          'type' => $userType,
-          'args' => [
-            'id' => ['type' => Type::nonNull(Type::id())]
-          ],
-          'resolve' => function ($root, $args) {
-            $db = new SQLite3('../db/data.db');
-            $results = $db->query("DELETE FROM user WHERE id=".$args['id']);
-            return null;
-          },
-        ],
-      ],
-    ]);
-
-    // See docs on schema options:
-    // http://webonyx.github.io/graphql-php/type-system/schema/#configuration-options
-    $schema = new Schema([
-      'query' => $queryType,
-      'mutation' => $mutationType,
-    ]);
-
-    // See docs on server options:
-    // http://webonyx.github.io/graphql-php/executing-queries/#server-configuration-options
-    $server = new StandardServer([
-        'schema' => $schema
-    ]);
-
-    $server->handleRequest();
+  $server->handleRequest();
 
 } catch (\Exception $e) {
     StandardServer::send500Error($e);

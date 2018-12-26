@@ -1,12 +1,13 @@
 {
-    "name": "sqamar/gql-php",
-    "authors": [
-        {
-            "name": "Shahab Qamar"
-        }
-    ],
-    "require": {
-        "webonyx/graphql-php": "^0.11.2",
-        "php": ">=5.3.3" //for heroku
+  "name": "tuomassalo/graphql-php-sqlite",
+  "description": "A naïve GraphQL interface for querying photos.db from Apple Photos app",
+  "authors": [
+    {
+      "name": "Tuomas Salo"
     }
+  ],
+  "require": {
+    "webonyx/graphql-php": "^0.11.2",
+    "php": ">=5.3.3"
+  }
 }
