@@ -13,6 +13,14 @@ try {
     'fields' => [
       'imagePath' => ['type' => Type::string()],
       'name' => ['type' => Type::string()],
+      'type' => ['type' => Type::string()],
+      'latitude' => ['type' => Type::float()],
+      'longitude' => ['type' => Type::float()],
+      'width' => ['type' => Type::int()],
+      'height' => ['type' => Type::int()],
+      'imageDate' => ['type' => Type::int()], // unix timestamp, seconds since 1970-01-01
+      'duration' => ['type' => Type::int()], // in seconds (rounded to integer)
+
     ]
   ]);
 
@@ -22,29 +30,69 @@ try {
       'photos' => [
         'type' => Type::listOf($photoType),
         'args' => [
-          'q' => [
-            'type' => Type::string(),
-            'defaultValue' => null
-          ],
+          'q' => ['type' => Type::string(), 'defaultValue' => null],
+          'latMin' => ['type' => Type::float(), 'defaultValue' => null],
+          'latMax' => ['type' => Type::float(), 'defaultValue' => null],
+          'lngMin' => ['type' => Type::float(), 'defaultValue' => null],
+          'lngMax' => ['type' => Type::float(), 'defaultValue' => null],
         ],
         'resolve' => function ($root, $args) {
           try {
             error_log(json_encode([$root, $args]));
-            $conds = ['RKVersion.nonRawMasterUuid = RKMaster.uuid'];
+            $conds = [
+              'RKVersion.nonRawMasterUuid = RKMaster.uuid',
+              'RKVersion.isInTrash = 0',
+              'RKMaster.isInTrash = 0',
+            ];
             $vals = [];
 
+            // freetext search
             if($args['q']) {
-              $conds[] = 'RKVersion.name LIKE :q';
-              $vals[] = [':q', '%' . $args['q'] . '%']; // NB: no escaping for _ or %
+              // $conds[] = 'RKVersion.name LIKE :q';
+              // $vals[] = [':q', '%' . $args['q'] . '%', SQLITE3_TEXT]; // NB: no escaping for _ or %
+              // TMP!
+              $conds[] = '(RKVersion.name LIKE :q OR RKVersion.uuid LIKE :q)';
+              $vals[] = [':q', '%' . $args['q'] . '%', SQLITE3_TEXT]; // NB: no escaping for _ or %
+              $vals[] = [':q', '%' . $args['q'] . '%', SQLITE3_TEXT]; // NB: no escaping for _ or %
+            }
+
+            // geolocation
+            if($args['latMin']) {
+              $conds[] = 'RKVersion.latitude >= :latMin';
+              $vals[] = [':latMin', $args['latMin'], SQLITE3_FLOAT];
+            }
+            if($args['latMax']) {
+              $conds[] = 'RKVersion.latitude <= :latMax';
+              $vals[] = [':latMax', $args['latMax'], SQLITE3_FLOAT];
+            }
+            if($args['lngMin']) {
+              $conds[] = 'RKVersion.longitude >= :lngMin';
+              $vals[] = [':lngMin', $args['lngMin'], SQLITE3_FLOAT];
+            }
+            if($args['lngMax']) {
+              $conds[] = 'RKVersion.longitude <= :lngMax';
+              $vals[] = [':lngMax', $args['lngMax'], SQLITE3_FLOAT];
             }
 
             error_log(json_encode([$conds, $vals]));
 
             $db = new SQLite3('../../photos.db');
-            error_log(2);
+
+            // see https://stackoverflow.com/questions/10746562/parsing-date-field-of-iphone-sms-file-from-backup/31454572#31454572
             $q = '
-              SELECT RKMaster.imagePath, RKVersion.name
-              FROM RKVersion, RKMaster
+              SELECT
+                RKMaster.imagePath,
+                RKMaster.duration,
+                RKVersion.processedWidth as width,
+                RKVersion.processedHeight as height,
+                RKVersion.name,
+                RKVersion.latitude,
+                RKVersion.longitude,
+                RKVersion.adjustmentUUID,
+                RKVersion.imageDate + 978307200 AS imageDate
+              FROM
+                RKVersion,
+                RKMaster
               WHERE
               '. implode(" AND ", $conds) . '
               LIMIT 50
@@ -53,12 +101,19 @@ try {
 
             $stmt = $db->prepare($q);
             foreach($vals as $v) {
-            $stmt->bindValue($v[0], $v[1]);
+              $stmt->bindValue($v[0], $v[1], $v[2]);
             }
             $result = $stmt->execute();
 
             $resultArr = [];
             while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+
+              if($row['duration']) {
+                $row['type'] = 'video';
+                $row['duration'] = round($row['duration']);
+              } else {
+                $row['type'] = 'image';
+              }
               $resultArr[] = $row;
             }
 

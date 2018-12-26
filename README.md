@@ -10,13 +10,13 @@ A naïve GraphQL interface for querying photos.db from Apple Photos app.
 
   - [x] name (caption)
 
-  - [ ] lat/lng
+  - [x] lat/lng
 
-  - [ ] dimensions
+  - [x] dimensions
 
-  - [ ] timestamp
+  - [x] imageDate
 
-  - [ ] type
+  - [x] type
 
   - [ ] albums where the photo appears in?
 
@@ -24,7 +24,7 @@ A naïve GraphQL interface for querying photos.db from Apple Photos app.
 
   - [x] q (freetext) (multi?)
 
-  - [ ] {lat,long}{Min,Max} = 12.34567
+  - [x] {lat,long}{Min,Max} = 12.34567
 
   - [ ] date{Min,Max}
 
