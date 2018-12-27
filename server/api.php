@@ -7,18 +7,23 @@ use GraphQL\Type\Schema;
 use GraphQL\GraphQL;
 use GraphQL\Server\StandardServer;
 
+require __DIR__ . '/query.php';
+
+# TODO: move to env
+const LIBRARY_PATH = '/var/www/html/photosroot';
+
 try {
   $photoType = new ObjectType([
     'name' => 'photo',
     'fields' => [
-      'imagePath' => ['type' => Type::string()],
-      'name' => ['type' => Type::string()],
+      'path' => ['type' => Type::string()],
+      'caption' => ['type' => Type::string()],
       'type' => ['type' => Type::string()],
-      'latitude' => ['type' => Type::float()],
-      'longitude' => ['type' => Type::float()],
+      'lat' => ['type' => Type::float()],
+      'lng' => ['type' => Type::float()],
       'width' => ['type' => Type::int()],
       'height' => ['type' => Type::int()],
-      'imageDate' => ['type' => Type::int()], // unix timestamp, seconds since 1970-01-01
+      'date' => ['type' => Type::float()], // unix timestamp, seconds since 1970-01-01
       'duration' => ['type' => Type::int()], // in seconds (rounded to integer)
 
     ]
@@ -35,6 +40,9 @@ try {
           'latMax' => ['type' => Type::float(), 'defaultValue' => null],
           'lngMin' => ['type' => Type::float(), 'defaultValue' => null],
           'lngMax' => ['type' => Type::float(), 'defaultValue' => null],
+          'dateMin' => ['type' => Type::float(), 'defaultValue' => null],
+          'dateMax' => ['type' => Type::float(), 'defaultValue' => null],
+          'type' => ['type' => Type::string(), 'defaultValue' => null],
         ],
         'resolve' => function ($root, $args) {
           try {
@@ -66,91 +74,4 @@ try {
 
 } catch (\Exception $e) {
     StandardServer::send500Error($e);
-}
-
-
-function findPhotos($args) {
-
-  error_log(json_encode([$root, $args]));
-  $conds = [
-    'RKVersion.nonRawMasterUuid = RKMaster.uuid',
-    'RKVersion.isInTrash = 0',
-    'RKMaster.isInTrash = 0',
-  ];
-  $vals = [];
-
-  // freetext search
-  if($args['q']) {
-    // $conds[] = 'RKVersion.name LIKE :q';
-    // $vals[] = [':q', '%' . $args['q'] . '%', SQLITE3_TEXT]; // NB: no escaping for _ or %
-    // TMP!
-    $conds[] = '(RKVersion.name LIKE :q OR RKVersion.uuid LIKE :q)';
-    $vals[] = [':q', '%' . $args['q'] . '%', SQLITE3_TEXT]; // NB: no escaping for _ or %
-    $vals[] = [':q', '%' . $args['q'] . '%', SQLITE3_TEXT]; // NB: no escaping for _ or %
-  }
-
-  // geolocation
-  if($args['latMin']) {
-    $conds[] = 'RKVersion.latitude >= :latMin';
-    $vals[] = [':latMin', $args['latMin'], SQLITE3_FLOAT];
-  }
-  if($args['latMax']) {
-    $conds[] = 'RKVersion.latitude <= :latMax';
-    $vals[] = [':latMax', $args['latMax'], SQLITE3_FLOAT];
-  }
-  if($args['lngMin']) {
-    $conds[] = 'RKVersion.longitude >= :lngMin';
-    $vals[] = [':lngMin', $args['lngMin'], SQLITE3_FLOAT];
-  }
-  if($args['lngMax']) {
-    $conds[] = 'RKVersion.longitude <= :lngMax';
-    $vals[] = [':lngMax', $args['lngMax'], SQLITE3_FLOAT];
-  }
-
-  error_log(json_encode([$conds, $vals]));
-
-  $db = new SQLite3('../../photos.db');
-
-  // see https://stackoverflow.com/questions/10746562/parsing-date-field-of-iphone-sms-file-from-backup/31454572#31454572
-  $q = '
-    SELECT
-      RKMaster.imagePath,
-      RKMaster.duration,
-      RKVersion.processedWidth as width,
-      RKVersion.processedHeight as height,
-      RKVersion.name,
-      RKVersion.latitude,
-      RKVersion.longitude,
-      RKVersion.adjustmentUUID,
-      RKVersion.imageDate + 978307200 AS imageDate
-    FROM
-      RKVersion,
-      RKMaster
-    WHERE
-    '. implode(" AND ", $conds) . '
-    LIMIT 50
-  ';
-  error_log($q);
-
-  $stmt = $db->prepare($q);
-  foreach($vals as $v) {
-    $stmt->bindValue($v[0], $v[1], $v[2]);
-  }
-  $result = $stmt->execute();
-
-  $resultArr = [];
-  while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
-
-    if($row['duration']) {
-      $row['type'] = 'video';
-      $row['duration'] = round($row['duration']);
-    } else {
-      $row['type'] = 'image';
-    }
-    $resultArr[] = $row;
-  }
-
-  // error_log(json_encode([resultArr => $resultArr]));
-
-  return $resultArr;
 }
