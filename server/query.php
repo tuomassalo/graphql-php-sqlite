@@ -1,8 +1,10 @@
 <?php
 require_once __DIR__ . '../../vendor/autoload.php';
 
-# TODO: move to env
+// TODO: move to env
 const LIBRARY_PATH = '/var/www/html/photosroot';
+
+// see https://stackoverflow.com/questions/10746562/parsing-date-field-of-iphone-sms-file-from-backup/31454572#31454572
 const DATE_OFFSET = 978307200.0;
 
 function findPhotos($args) {
@@ -64,18 +66,23 @@ function findPhotos($args) {
     $vals[] = [':dateMax', $args['dateMax'] - DATE_OFFSET, SQLITE3_FLOAT];
   }
 
+  if($args['orderBy'] == 'DATE_ASC') {
+    $orderBy = 'RKVersion.imageDate, RKMaster.imagePath';
+  } else if($args['orderBy'] == 'DATE_DESC') {
+    $orderBy = 'RKVersion.imageDate DESC, RKMaster.imagePath DESC';
+  }
+
   error_log(json_encode([$conds, $vals]));
 
   $db = new SQLite3('../../photos.db');
 
-  // see https://stackoverflow.com/questions/10746562/parsing-date-field-of-iphone-sms-file-from-backup/31454572#31454572
   $q = '
     SELECT
       RKMaster.imagePath AS path,
       RKMaster.duration,
       RKVersion.processedWidth as width,
       RKVersion.processedHeight as height,
-      RKVersion.name,
+      RKVersion.name AS caption,
       RKVersion.latitude AS lat,
       RKVersion.longitude AS lng,
       RKVersion.modelId,
@@ -86,6 +93,7 @@ function findPhotos($args) {
       RKMaster
     WHERE
     '. implode(" AND ", $conds) . '
+    ORDER BY ' . $orderBy . '
     LIMIT 50
   ';
   error_log($q);

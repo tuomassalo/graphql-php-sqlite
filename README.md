@@ -28,7 +28,7 @@ A naïve GraphQL interface for querying photos.db from Apple Photos app.
 
   - [x] date{Min,Max}
 
-  - [x] type = image|video
+  - [x] type = IMAGE|VIDEO
 
   - [ ] album name
 
@@ -36,7 +36,7 @@ A naïve GraphQL interface for querying photos.db from Apple Photos app.
 
 - [ ] fetch aggregate data (result count by date; geolocation clusters?)
 
-- [ ] order by
+- [x] order by = DATE_ASC|DATE_DESC
 
 - [ ] pagination
 

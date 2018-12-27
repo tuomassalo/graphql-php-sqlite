@@ -10,15 +10,21 @@ use GraphQL\Server\StandardServer;
 
 require __DIR__ . '/query.php';
 
-# TODO: move to env
-const LIBRARY_PATH = '/var/www/html/photosroot';
-
 try {
 
   $mediaTypeEnum = new EnumType([
     'name' => 'mediaType',
     'description' => 'is it a still or a video clip?',
     'values' => ['IMAGE', 'VIDEO']
+  ]);
+
+  $orderEnum = new EnumType([
+    'name' => 'order',
+    'description' => 'what do we want the result sorted by?',
+    'values' => [
+      'DATE_ASC',
+      'DATE_DESC',
+    ]
   ]);
 
   $photoType = new ObjectType([
@@ -33,7 +39,6 @@ try {
       'height' => ['type' => Type::int()],
       'date' => ['type' => Type::float()], // unix timestamp, seconds since 1970-01-01
       'duration' => ['type' => Type::int()], // in seconds (rounded to integer)
-
     ]
   ]);
 
@@ -51,6 +56,7 @@ try {
           'dateMin' => ['type' => Type::float(), 'defaultValue' => null],
           'dateMax' => ['type' => Type::float(), 'defaultValue' => null],
           'type' => ['type' => $mediaTypeEnum, 'defaultValue' => null],
+          'orderBy' => ['type' => $orderEnum, 'defaultValue' => 'DATE_ASC'],
         ],
         'resolve' => function ($root, $args) {
           try {
