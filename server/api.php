@@ -2,6 +2,7 @@
 require_once __DIR__ . '../../vendor/autoload.php';
 
 use GraphQL\Type\Definition\ObjectType;
+use GraphQL\Type\Definition\EnumType;
 use GraphQL\Type\Definition\Type;
 use GraphQL\Type\Schema;
 use GraphQL\GraphQL;
@@ -13,12 +14,19 @@ require __DIR__ . '/query.php';
 const LIBRARY_PATH = '/var/www/html/photosroot';
 
 try {
+
+  $mediaTypeEnum = new EnumType([
+    'name' => 'mediaType',
+    'description' => 'is it a still or a video clip?',
+    'values' => ['IMAGE', 'VIDEO']
+  ]);
+
   $photoType = new ObjectType([
     'name' => 'photo',
     'fields' => [
       'path' => ['type' => Type::string()],
       'caption' => ['type' => Type::string()],
-      'type' => ['type' => Type::string()],
+      'type' => ['type' => $mediaTypeEnum],
       'lat' => ['type' => Type::float()],
       'lng' => ['type' => Type::float()],
       'width' => ['type' => Type::int()],
@@ -42,7 +50,7 @@ try {
           'lngMax' => ['type' => Type::float(), 'defaultValue' => null],
           'dateMin' => ['type' => Type::float(), 'defaultValue' => null],
           'dateMax' => ['type' => Type::float(), 'defaultValue' => null],
-          'type' => ['type' => Type::string(), 'defaultValue' => null],
+          'type' => ['type' => $mediaTypeEnum, 'defaultValue' => null],
         ],
         'resolve' => function ($root, $args) {
           try {

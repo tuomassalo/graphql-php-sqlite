@@ -54,12 +54,10 @@ function findPhotos($args) {
   }
 
   if($args['type']) {
-    if($args['type'] == 'image') {
+    if($args['type'] == 'IMAGE') {
       $conds[] = 'RKMaster.duration IS NULL';
-    } else if($args['type'] == 'video') {
+    } else if($args['type'] == 'VIDEO') {
       $conds[] = 'RKMaster.duration IS NOT NULL';
-    } else {
-      throw new Exception("Invalid type", 1);
     }
 
     $conds[] = 'RKVersion.imageDate <= :dateMax';
@@ -122,10 +120,10 @@ function findPhotos($args) {
     }
 
     if($row['duration']) {
-      $row['type'] = 'video';
+      $row['type'] = 'VIDEO';
       $row['duration'] = round($row['duration']);
     } else {
-      $row['type'] = 'image';
+      $row['type'] = 'IMAGE';
     }
     $resultArr[] = $row;
   }
